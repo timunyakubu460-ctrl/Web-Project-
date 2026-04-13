@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Car Dodge Game</title>
+
+<style>
+body{
+  background-image:url('rd.jpg');
+  background-position:center;
+  background-size:cover;
+  background-repeat:no-repeat;
+  height:100%;
+}
+
+.controls {
+  position: fixed;
+  bottom: 45px;
+  left:-20px;
+  width: 90%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 40px;
+}
+
+button {
+  color:white;
+  font-size: 20px;
+  padding: 15px 30px;
+  border: none;
+  border-radius: 10px;
+  background:none;
+  cursor: pointer;
+  border:1px solid white;
+}
+
+button:active{
+  font-size: 25px;
+}
+
+#restartBtn {
+  position: fixed;
+  top: 75%;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  display: none;
+}
+
+#shop {
+  display:none;
+  position:fixed;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  background:black;
+  color:white;
+  padding:20px;
+  border:2px solid white;
+  border-radius:10px;
+  width:250px;
+  text-align:center;
+  z-index:1000;
+}
+
+#shopBtn{
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  padding: 10px 15px;
+  font-size: 16px;
+  z-index: 1000;
+}
+
+#shopMsg{
+  position:fixed;
+  top:20%;
+  left:50%;
+  transform:translateX(-50%);
+  background:black;
+  color:white;
+  padding:10px 20px;
+  border:1px solid white;
+  display:none;
+  z-index:2000;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="gameCanvas" width="400" height="600"></canvas>
+
+<div class="controls">
+  <button id="leftBtn">⬅</button>
+  <button onclick="clickSoundPlay(); Start()" id="str">Start</button>
+  <button id="rightBtn">➡</button>
+</div>
+
+<button onclick="toggleShop()" id="shopBtn">🛒 Shop</button>
+<button id="restartBtn">Restart</button>
+
+<div id="shop">
+  <h3>🚗 CAR SHOP</h3>
+  <button onclick="buyCar(0)">Basic Car (FREE)</button><br><br>
+  <button onclick="buyCar(1)">Speed Car (50 Coin)</button><br><br>
+  <button onclick="buyCar(2)">Tank Car (100 Coin)</button><br><br>
+  <button onclick="toggleShop()">Close</button>
+</div>
+
+<div id="shopMsg"></div>
+
+<script>
+window.alert("Game By: Timun-0331 ENJOYY!!!");
+function clickSoundPlay(){
+  new Audio("click.mp3").play();
+}
+
+function Start(){
+
+  document.getElementById("str").style.display = "none";
+
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const restartBtn = document.getElementById("restartBtn");
+
+  const playerImg = new Image();
+  playerImg.src = "a.png";
+
+  const trukCar = new Image();
+  trukCar.src = "d.png";
+
+  const SpedCar = new Image();
+  SpedCar.src = "c.png";
+
+  const enemyImg = new Image();
+  enemyImg.src = "b.png";
+
+  const coinImg = new Image();
+  coinImg.src = "coin.png";
+
+  const coinSound = new Audio("coin.mp3");
+  const crashSound = new Audio("crash.mp3");
+
+  const bgMusic = new Audio("bg-music.mp3");
+  const engineSound = new Audio("engine.mp3");
+
+  bgMusic.loop = true;
+  engineSound.loop = true;
+
+  let car, obstacles, coins, gameOver, score;
+
+  let moveLeft = false;
+  let moveRight = false;
+
+  // SAFE STORAGE
+  let coinsMoney = Number(localStorage.getItem("coins")) || 0;
+
+  let ownedCars;
+  try {
+    ownedCars = JSON.parse(localStorage.getItem("ownedCars"));
+    if (!Array.isArray(ownedCars)) throw "bad";
+  } catch {
+    ownedCars = [true, false, false];
+  }
+
+  let selectedCar = Number(localStorage.getItem("car"));
+  if (isNaN(selectedCar)) selectedCar = 0;
+
+  let difficulty = 1;
+
+  // ✅ FIXED SPAWN SYSTEM (NO MORE FRAME BUGS)
+  let lastObstacleTime = 0;
+  let lastCoinTime = 0;
+
+  function showMsg(text){
+    const msg = document.getElementById("shopMsg");
+    msg.innerText = text;
+    msg.style.display = "block";
+    setTimeout(()=>msg.style.display="none",1500);
+  }
+
+  function initGame(){
+    car = { x:180, y:500, width:40, height:80, speed:6 };
+
+    obstacles = [];
+    coins = [];
+    gameOver = false;
+    score = 0;
+    difficulty = 1;
+
+    lastObstacleTime = 0;
+    lastCoinTime = 0;
+
+    restartBtn.style.display = "none";
+
+    bgMusic.currentTime = 0;
+    engineSound.currentTime = 0;
+  }
+
+  function drawCar(){
+    if(selectedCar===0) ctx.drawImage(playerImg,car.x,car.y,car.width,car.height);
+    if(selectedCar===1) ctx.drawImage(SpedCar,car.x,car.y,car.width,car.height);
+    if(selectedCar===2) ctx.drawImage(trukCar,car.x,car.y,car.width,car.height);
+  }
+
+  function drawObstacles(){
+    obstacles.forEach(o=>{
+      ctx.drawImage(enemyImg,o.x,o.y,o.width,o.height);
+    });
+  }
+
+  function drawCoins(){
+    coins.forEach(c=>{
+      ctx.drawImage(coinImg,c.x,c.y,c.width,c.height);
+    });
+  }
+
+  function drawScore(){
+    ctx.fillStyle="white";
+    ctx.font="20px Arial";
+    ctx.fillText("Score: "+score,10,30);
+    ctx.fillText("Coins: "+coinsMoney,10,60);
+    ctx.fillText("Difficulty: "+difficulty.toFixed(2),10,90);
+  }
+
+  function playSound(s){
+    s.currentTime=0;
+    s.play();
+  }
+
+  function updateGame(){
+
+    difficulty += 0.0004;
+
+    let now = performance.now();
+
+    // 🔥 OBSTACLES SPAWN
+    let obstacleRate = Math.max(350, 900 - difficulty * 120);
+
+    if(now - lastObstacleTime > obstacleRate){
+      let x = Math.random() * (canvas.width - 60);
+      obstacles.push({x,y:-100,width:40,height:80,passed:false});
+      lastObstacleTime = now;
+    }
+
+    obstacles.forEach(o=>{
+      o.y += (4 + difficulty * 1.5);
+
+      if(!o.passed && o.y > car.y){
+        score++;
+        o.passed = true;
+      }
+
+      if(
+        car.x < o.x + o.width &&
+        car.x + car.width > o.x &&
+        car.y < o.y + o.height &&
+        car.y + car.height > o.y
+      ){
+        gameOver = true;
+        restartBtn.style.display="block";
+
+        bgMusic.pause();
+        engineSound.pause();
+
+        playSound(crashSound);
+      }
+    });
+
+    obstacles = obstacles.filter(o=>o.y<canvas.height);
+
+    // 🔥 COINS SPAWN (FIXED)
+    let coinRate = Math.max(600, 1000 - difficulty * 100);
+
+    if(now - lastCoinTime > coinRate){
+      let x = Math.random() * (canvas.width - 30);
+      coins.push({x,y:-50,width:25,height:25});
+      lastCoinTime = now;
+    }
+
+    coins.forEach((c,i)=>{
+      c.y += 4;
+
+      if(
+        car.x < c.x + c.width &&
+        car.x + car.width > c.x &&
+        car.y < c.y + c.height &&
+        car.y + car.height > c.y
+      ){
+        score += 10;
+        coinsMoney += 5;
+        playSound(coinSound);
+        coins.splice(i,1);
+      }
+    });
+
+    coins = coins.filter(c=>c.y<canvas.height);
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if(gameOver){
+      ctx.fillStyle="white";
+      ctx.font="30px Arial";
+      ctx.fillText("GAME OVER",100,300);
+      ctx.font="20px Arial";
+      ctx.fillText("Score: "+score,140,340);
+      return;
+    }
+
+    if(moveLeft) car.x -= car.speed;
+    if(moveRight) car.x += car.speed;
+
+    car.x = Math.max(0,Math.min(canvas.width-car.width,car.x));
+
+    drawCar();
+    drawObstacles();
+    drawCoins();
+    drawScore();
+    updateGame();
+
+    requestAnimationFrame(draw);
+  }
+
+  const leftBtn=document.getElementById("leftBtn");
+  const rightBtn=document.getElementById("rightBtn");
+
+  leftBtn.addEventListener("mousedown",()=>moveLeft=true);
+  leftBtn.addEventListener("mouseup",()=>moveLeft=false);
+  leftBtn.addEventListener("touchstart",e=>{e.preventDefault();moveLeft=true;});
+  leftBtn.addEventListener("touchend",()=>moveLeft=false);
+
+  rightBtn.addEventListener("mousedown",()=>moveRight=true);
+  rightBtn.addEventListener("mouseup",()=>moveRight=false);
+  rightBtn.addEventListener("touchstart",e=>{e.preventDefault();moveRight=true;});
+  rightBtn.addEventListener("touchend",()=>moveRight=false);
+
+  restartBtn.onclick=()=>{
+    initGame();
+    bgMusic.play();
+    engineSound.play();
+    draw();
+  };
+
+  let loaded=0;
+  [playerImg,enemyImg,coinImg].forEach(img=>{
+    img.onload=()=>{
+      loaded++;
+      if(loaded===3){
+        initGame();
+        bgMusic.play();
+        engineSound.play();
+        draw();
+      }
+    };
+  });
+
+  window.toggleShop=function(){
+    const shop=document.getElementById("shop");
+    shop.style.display = shop.style.display==="none"?"block":"none";
+  }
+
+  window.buyCar=function(id){
+
+    if(ownedCars[id]){
+      selectedCar=id;
+      localStorage.setItem("car",selectedCar);
+      showMsg("Car Equipped!");
+      return;
+    }
+
+    if(id===1 && coinsMoney>=50){
+      coinsMoney-=50;
+      ownedCars[1]=true;
+      selectedCar=1;
+      showMsg("Speed Car Unlocked!");
+    }
+    else if(id===2 && coinsMoney>=100){
+      coinsMoney-=100;
+      ownedCars[2]=true;
+      selectedCar=2;
+      showMsg("Tank Car Unlocked!");
+    }
+    else if(id!==0){
+      showMsg("Not enough coins!");
+      return;
+    }
+
+    if(id===0){
+      selectedCar=0;
+      showMsg("Basic Car Selected");
+    }
+
+    localStorage.setItem("coins",coinsMoney);
+    localStorage.setItem("car",selectedCar);
+    localStorage.setItem("ownedCars",JSON.stringify(ownedCars));
+  }
+
+}
+</script>
+
+</body>
+</html>
